@@ -196,6 +196,7 @@ function Chat() {
   const navigate = useNavigate();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [typingMode, setTypingMode] = useState(false);
+  const [expandedMsgId, setExpandedMsgId] = useState<number | null>(null);
   // Ref for the live transcript box so we can auto-scroll to the latest words
   const draftScrollRef = useRef<HTMLDivElement>(null);
 
@@ -248,11 +249,14 @@ function Chat() {
   const showTextarea = micState === "paused" || typingMode;
   const listening = micState === "listening";
 
-  // Auto-scroll the transcription box to bottom whenever draft updates
+  // Auto-scroll the transcription box to bottom whenever draft updates.
+  // requestAnimationFrame ensures we run after the DOM has painted the new text.
   useEffect(() => {
-    if (draftScrollRef.current) {
-      draftScrollRef.current.scrollTop = draftScrollRef.current.scrollHeight;
-    }
+    if (!draftScrollRef.current) return;
+    const el = draftScrollRef.current;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
   }, [draft]);
 
   const timerLabel = finished
@@ -306,9 +310,28 @@ function Chat() {
 
       {showLastUser ? (
         <div className="flex justify-end">
-          <p className="max-w-[85%] rounded-2xl bg-primary px-4 py-3 text-[15px] font-medium leading-relaxed text-primary-foreground md:max-w-[70%] md:py-2.5">
-            {lastUserMsg!.text}
-          </p>
+          <div className="flex max-w-[85%] flex-col items-end gap-1 md:max-w-[70%]">
+            <p
+              className={`rounded-2xl bg-primary px-4 py-3 text-[15px] font-medium leading-relaxed text-primary-foreground md:py-2.5 ${
+                expandedMsgId === lastUserMsg!.id ? "" : "line-clamp-6"
+              }`}
+            >
+              {lastUserMsg!.text}
+            </p>
+            {lastUserMsg!.text.length > 300 ? (
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedMsgId(
+                    expandedMsgId === lastUserMsg!.id ? null : lastUserMsg!.id,
+                  )
+                }
+                className="text-[11px] text-primary/70 hover:text-primary"
+              >
+                {expandedMsgId === lastUserMsg!.id ? "Show less" : "Show more…"}
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

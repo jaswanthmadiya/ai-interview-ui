@@ -18,25 +18,52 @@ export const Route = createFileRoute("/report/$sessionId")({
   component: ReportPage,
 });
 
-// ─── style maps ───────────────────────────────────────────────────────────────
+// ─── recommendation normalisation ─────────────────────────────────────────────
+// The backend returns `recommendation` as either a short keyword ("advance",
+// "reject", "hold") OR a full English sentence ("Proceed with candidacy…").
+// This function detects the intent from the raw string so both forms work.
 
-const RECOMMENDATION_STYLE: Record<string, { bg: string; icon: React.ReactNode; label: string }> = {
-  advance: {
-    bg: "border-primary/30 bg-primary/8 text-primary",
-    icon: <CheckCircle2 className="size-5" />,
-    label: "Advance",
-  },
-  reject: {
-    bg: "border-destructive/30 bg-destructive/8 text-destructive",
-    icon: <XCircle className="size-5" />,
-    label: "Reject",
-  },
-  hold: {
+type RecStyle = { bg: string; icon: React.ReactNode; label: string };
+
+function parseRecommendation(raw: string): RecStyle {
+  const s = raw.toLowerCase();
+
+  const isAdvance =
+    s === "advance" ||
+    s.includes("proceed") ||
+    s.includes("advance") ||
+    s.includes("recommend") ||
+    s.includes("strong potential") ||
+    s.includes("suitable");
+
+  const isReject =
+    s === "reject" ||
+    s.includes("reject") ||
+    s.includes("not recommend") ||
+    s.includes("do not proceed") ||
+    s.includes("decline");
+
+  if (isAdvance) {
+    return {
+      bg: "border-primary/30 bg-primary/8 text-primary",
+      icon: <CheckCircle2 className="size-5" />,
+      label: "Advance",
+    };
+  }
+  if (isReject) {
+    return {
+      bg: "border-destructive/30 bg-destructive/8 text-destructive",
+      icon: <XCircle className="size-5" />,
+      label: "Reject",
+    };
+  }
+  return {
     bg: "border-border bg-secondary text-secondary-foreground",
     icon: null,
     label: "Hold",
-  },
-};
+  };
+}
+
 
 const TIER_STYLE: Record<string, string> = {
   strong: "border-l-primary",
@@ -92,7 +119,7 @@ function ReportPage() {
       .finally(() => setLoading(false));
   }, [sessionId]);
 
-  const rec = report ? (RECOMMENDATION_STYLE[report.recommendation] ?? RECOMMENDATION_STYLE.hold) : null;
+  const rec = report ? parseRecommendation(report.recommendation) : null;
 
   return (
     <div className="min-h-screen bg-background">
