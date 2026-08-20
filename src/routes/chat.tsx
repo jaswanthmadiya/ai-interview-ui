@@ -144,7 +144,7 @@ const IconChip = ({ label, onClick }: { label: string; onClick?: () => void }) =
     type="button"
     aria-label={label}
     onClick={onClick}
-    className="flex size-10 items-center justify-center rounded-full bg-secondary text-muted-foreground"
+    className="flex size-10 items-center justify-center rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors"
   >
     <Keyboard className="size-4" />
   </button>
@@ -157,8 +157,11 @@ function SendButton({ active, onClick }: { active: boolean; onClick: () => void 
       aria-label="Send answer"
       disabled={!active}
       onClick={onClick}
-      className={`flex size-10 items-center justify-center rounded-full transition-colors ${active ? "bg-primary text-primary-foreground" : "bg-accent text-primary/40"
-        }`}
+      className={`flex size-10 items-center justify-center rounded-full transition-all ${
+        active
+          ? "bg-primary text-primary-foreground shadow-sm hover:opacity-90 active:scale-95"
+          : "bg-accent text-primary/40 cursor-not-allowed"
+      }`}
     >
       <ArrowUp className="size-5" strokeWidth={2.5} />
     </button>
@@ -197,8 +200,12 @@ function Chat() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [typingMode, setTypingMode] = useState(false);
   const [expandedMsgId, setExpandedMsgId] = useState<number | null>(null);
-  // Ref for the live transcript box so we can auto-scroll to the latest words
+  
+  // Ref for the live transcription box so we can auto-scroll to the latest words
   const draftScrollRef = useRef<HTMLDivElement>(null);
+  // Refs for auto-resizing textareas
+  const mobileTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const desktopTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const id = getStoredSessionId();
@@ -246,18 +253,30 @@ function Chat() {
     allMessages.indexOf(lastUserMsg) > allMessages.indexOf(lastAiMsg);
 
   const busy = micState === "processing" || micState === "ai_speaking";
-  const showTextarea = micState === "paused" || typingMode;
   const listening = micState === "listening";
+  // Show the editable text box whenever typing mode is active, or mic is paused with a draft, or a draft exists
+  const showTextarea = typingMode || micState === "paused" || (draft.length > 0 && !listening);
 
-  // Auto-scroll the transcription box to bottom whenever draft updates.
-  // requestAnimationFrame ensures we run after the DOM has painted the new text.
+  // Auto-scroll the live transcription box to bottom whenever draft updates
   useEffect(() => {
     if (!draftScrollRef.current) return;
     const el = draftScrollRef.current;
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
-  }, [draft]);
+  }, [draft, listening]);
+
+  // Auto-resize textareas dynamically based on transcript length
+  useEffect(() => {
+    const resize = (el: HTMLTextAreaElement | null, minH: number, maxH: number) => {
+      if (!el) return;
+      el.style.height = "auto";
+      const nextH = Math.min(Math.max(el.scrollHeight, minH), maxH);
+      el.style.height = `${nextH}px`;
+    };
+    resize(mobileTextareaRef.current, 52, 130);
+    resize(desktopTextareaRef.current, 56, 140);
+  }, [draft, showTextarea]);
 
   const timerLabel = finished
     ? undefined
@@ -265,12 +284,15 @@ function Chat() {
       ? formatTimer(responseDeadlineSeconds)
       : undefined;
 
+  // Releasing PTT keeps draft in the text input box so the user can review & edit
   const handleHoldEnd = () => {
-    setTypingMode(false);
+    setTypingMode(true);
     stopRecording();
   };
 
+  // Explicit submit ONLY via Up-arrow button
   const handleSend = () => {
+    if (!draft.trim() || busy) return;
     setTypingMode(false);
     sendAnswer();
   };
@@ -285,6 +307,8 @@ function Chat() {
       }
     };
     const up = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "TEXTAREA" || t.tagName === "INPUT")) return;
       if (e.code === "Space") handleHoldEnd();
     };
     window.addEventListener("keydown", down);
@@ -296,8 +320,7 @@ function Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busy]);
 
-  // The conversation display: only show the last AI question and the last
-  // user answer (if it came after the AI question). No scrolling.
+  // The conversation display: question bubble, last response, live transcription box in middle
   const recentExchange = (
     <div className="flex flex-col gap-4">
       {lastAiMsg ? (
@@ -335,28 +358,29 @@ function Chat() {
         </div>
       ) : null}
 
+      {/* Live transcription box — aligned at the middle with orange dashed border */}
       {listening ? (
-        <div className="flex flex-col items-end gap-2">
-          {/* Fixed-height transcription box — never grows, newest words always scroll into view */}
-          <div
-            ref={draftScrollRef}
-            className="h-28 w-full max-w-[85%] overflow-y-auto overscroll-contain rounded-xl border border-dashed border-primary bg-accent/60 px-4 py-3 text-[15px] leading-relaxed md:max-w-[70%]"
-          >
-            {draft}
-            <span className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[3px] animate-pulse bg-primary" />
+        <div className="my-auto flex w-full flex-col items-center justify-center py-2 animate-in fade-in zoom-in-95 duration-200">
+          <div className="flex w-full max-w-[90%] flex-col items-center gap-2 md:max-w-[78%]">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+              <Waveform />
+              <span>Live Transcription</span>
+            </div>
+            <div
+              ref={draftScrollRef}
+              className="h-28 md:h-32 w-full overflow-y-auto overscroll-contain rounded-2xl border-2 border-dashed border-primary bg-primary/[0.04] p-4 text-[15px] leading-relaxed shadow-xs dark:bg-primary/[0.08]"
+            >
+              {draft ? (
+                <span className="text-foreground">{draft}</span>
+              ) : (
+                <span className="italic text-muted-foreground">Listening to your voice…</span>
+              )}
+              <span className="ml-1 inline-block h-[1.1em] w-[2px] translate-y-[2px] animate-pulse bg-primary" />
+            </div>
+            <span className="text-xs text-muted-foreground">
+              Release to finish dictating and edit before sending
+            </span>
           </div>
-          <span className="mr-auto flex items-center gap-2 text-sm font-medium text-primary md:mr-0">
-            <Waveform />
-            Listening
-          </span>
-        </div>
-      ) : null}
-
-      {micState === "paused" && !typingMode ? (
-        <div className="flex justify-center">
-          <span className="rounded-full bg-secondary px-4 py-2 text-[13px] text-muted-foreground">
-            Paused, Hold the mic to add more
-          </span>
         </div>
       ) : null}
 
@@ -404,22 +428,32 @@ function Chat() {
           <div className="shrink-0 px-4 pb-4 pt-2">
             {showTextarea ? (
               <>
-                <div className="rounded-2xl border border-primary p-4">
+                <div className="rounded-2xl border border-primary bg-card p-3 shadow-xs">
                   <textarea
+                    ref={mobileTextareaRef}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
-                    rows={3}
+                    placeholder="Edit or type your answer here…"
                     aria-label="Your answer"
-                    className="w-full resize-none bg-transparent text-[15px] leading-relaxed outline-none"
+                    className="w-full resize-none bg-transparent text-[15px] leading-relaxed outline-none min-h-[52px] max-h-[130px] overflow-y-auto"
                   />
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <IconChip label="Type your answer" onClick={() => setTypingMode(true)} />
+                  <div className="mt-2.5 flex items-center justify-between gap-3 pt-1 border-t border-border/50">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (draft) setDraft("");
+                        else setTypingMode(false);
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground px-1 py-1"
+                    >
+                      {draft ? "Clear" : "Close"}
+                    </button>
                     <button
                       type="button"
                       onPointerDown={() => !busy && startRecording()}
                       onPointerUp={handleHoldEnd}
                       disabled={busy}
-                      className="flex items-center gap-2 rounded-full bg-accent px-4 py-2.5 text-sm font-medium text-primary disabled:opacity-40"
+                      className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-primary disabled:opacity-40"
                     >
                       <Mic className="size-4" />
                       Hold to Speak
@@ -427,14 +461,14 @@ function Chat() {
                     <SendButton active={draft.trim().length > 0 && !busy} onClick={handleSend} />
                   </div>
                 </div>
-                <p className="mt-3 text-center text-[13px] text-muted-foreground">
-                  Tap the text to edit before sending
+                <p className="mt-2 text-center text-[12px] text-muted-foreground">
+                  Review & edit your transcript above, then tap the arrow button to submit
                 </p>
               </>
             ) : (
               <div className="flex flex-col items-center">
                 {listening ? (
-                  <p className="mb-4 text-sm font-medium text-primary">Release to pause</p>
+                  <p className="mb-4 text-sm font-medium text-primary">Release to edit and submit</p>
                 ) : (
                   <div className="relative mb-4">
                     <p className="rounded-lg bg-popover px-3 py-2 text-[13px] text-popover-foreground">
@@ -473,21 +507,21 @@ function Chat() {
                 {Math.min(currentQuestionIndex + 1, displayTotal || currentQuestionIndex + 1)} of{" "}
                 {displayTotal || "—"}
               </p>
-              <p className="mt-2 flex items-center gap-2 text-sm">
+              <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                 {listening ? (
                   <>
                     <span className="size-2.5 rounded-full bg-primary" />
-                    Listening, release <KeyCap>Space</KeyCap> to pause.
+                    Listening, release <KeyCap>Space</KeyCap> to review & edit.
                   </>
                 ) : showTextarea ? (
                   <>
-                    <KeyCap>Space</KeyCap> Hold to add more, or edit and send.
+                    {/* Review and edit your transcript, then click <KeyCap>↑</KeyCap> to submit. */}
                   </>
                 ) : busy ? (
                   <>Please wait for the interviewer.</>
                 ) : (
                   <>
-                    <KeyCap>Space</KeyCap> Hold to speak, release to pause.
+                    <KeyCap>Space</KeyCap> Hold to speak, release to review.
                   </>
                 )}
               </p>
@@ -501,28 +535,46 @@ function Chat() {
             </div>
 
             {/* Sticky bottom input */}
-            <div className="shrink-0 pt-6">
+            <div className="shrink-0 pt-4">
               {showTextarea ? (
                 <>
-                  <div className="rounded-xl border border-primary px-5 py-4">
+                  <div className="rounded-2xl border border-primary bg-card px-5 py-4 shadow-sm">
                     <textarea
+                      ref={desktopTextareaRef}
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
-                      rows={2}
+                      placeholder="Edit or type your answer here…"
                       aria-label="Your answer"
-                      className="w-full resize-none bg-transparent text-[15px] leading-relaxed outline-none"
+                      className="w-full resize-none bg-transparent text-[15px] leading-relaxed outline-none min-h-[56px] max-h-[140px] overflow-y-auto"
                     />
-                    <div className="mt-2 flex items-center justify-between">
-                      <IconChip label="Type your answer" onClick={() => setTypingMode(true)} />
-                      <span className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-primary">
+                    <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-border/50">
+                      <div className="flex items-center gap-2">
+                        <IconChip label="Type your answer" onClick={() => setTypingMode(true)} />
+                        {draft.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setDraft("")}
+                            className="rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                          >
+                            Clear text
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onPointerDown={() => !busy && startRecording()}
+                        onPointerUp={handleHoldEnd}
+                        disabled={busy}
+                        className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-primary hover:bg-accent/80 transition-colors disabled:opacity-40"
+                      >
                         <Mic className="size-4" />
                         Hold <KeyCap className="border-primary/40 text-primary">Space</KeyCap> to Speak
-                      </span>
+                      </button>
                       <SendButton active={draft.trim().length > 0 && !busy} onClick={handleSend} />
                     </div>
                   </div>
-                  <p className="mt-3 text-center text-[13px] text-muted-foreground">
-                    Click the text to edit before sending
+                  <p className="mt-2.5 text-center text-[13px] text-muted-foreground">
+                    Review & edit your transcript above, then click the arrow button <KeyCap>↑</KeyCap> to submit
                   </p>
                 </>
               ) : (
@@ -531,7 +583,7 @@ function Chat() {
                     {listening ? (
                       <p className="mb-4 flex items-center gap-2 text-sm font-medium text-primary">
                         Release <KeyCap className="border-primary/40 text-primary">Space</KeyCap> to
-                        pause
+                        review & edit
                       </p>
                     ) : (
                       <div className="relative mb-3">
@@ -575,3 +627,4 @@ function Chat() {
     </>
   );
 }
+

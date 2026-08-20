@@ -26,13 +26,16 @@ interface UseInterviewSessionResult {
   firstAudioReceived: boolean;
 }
 
+interface IWindowWithSpeech extends Window {
+  SpeechRecognition?: any;
+  webkitSpeechRecognition?: any;
+}
+
 /**
- * Owns the entire live interview WebSocket connection: push-to-talk audio
- * capture (a fresh MediaRecorder + a fresh Deepgram session per press, kept
- * in sync — see the backend's routes_audio.py for why), the
- * dictate-into-draft protocol (releasing the mic never auto-submits; only
- * an explicit sendAnswer() does), and PCM audio playback for the
- * interviewer's spoken responses.
+ * Owns the live interview WebSocket connection: dictation into draft via
+ * browser speech recognition (releasing the mic only populates the editable draft;
+ * NEVER auto-submits to LLM), explicit turn submission via typed_turn, and PCM
+ * audio streaming playback for the interviewer's spoken responses.
  */
 export function useInterviewSession(sessionId: string | null): UseInterviewSessionResult {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -50,8 +53,7 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
   const [firstAudioReceived, setFirstAudioReceived] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<any>(null);
   const isRecordingRef = useRef(false);
   const nextMessageIdRef = useRef(1);
 
@@ -60,7 +62,6 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
   // lands with minimal latency.
   const audioCtxRef = useRef<AudioContext | null>(null);
   const receivingAudioRef = useRef(false);
-  const playbackQueueRef = useRef<Promise<void>>(Promise.resolve());
   const deadlineTickingRef = useRef(false);
   // nextStartTimeRef tracks where the next scheduled buffer should begin so
   // chunks are stitched together without gaps or overlaps.
@@ -138,10 +139,6 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
 
   const clearDraft = useCallback(() => {
     setDraftState("");
-    const socket = socketRef.current;
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "clear_draft" }));
-    }
   }, []);
 
   // -----------------------------------------------------------------
@@ -181,7 +178,14 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
       switch (msg["type"]) {
         case "transcript": {
           const text = String(msg["text"] ?? "");
-          setMessages((prev) => [...prev, { id: nextMessageIdRef.current++, role: "user", text }]);
+          // Deduplicate if already added optimistically
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.role === "user" && last.text === text) {
+              return prev;
+            }
+            return [...prev, { id: nextMessageIdRef.current++, role: "user", text }];
+          });
           break;
         }
         case "ai_text": {
@@ -201,9 +205,6 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
           break;
         }
         case "partial_transcript": {
-          // Live interim caption while actively dictating — merged into the
-          // draft optimistically so the candidate sees speech land in real
-          // time rather than only once the press ends.
           if (isRecordingRef.current) setDraftState(String(msg["text"] ?? ""));
           break;
         }
@@ -230,7 +231,7 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
           deadlineTickingRef.current = false;
           break;
         case "force_stop_recording":
-          stopRecordingInternal(false);
+          stopRecordingInternal();
           setMicState("paused");
           break;
         case "no_speech_detected":
@@ -266,92 +267,104 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
   }, [sessionId, scheduleChunk]);
 
   // -----------------------------------------------------------------
-  // Push-to-talk capture — a fresh MediaRecorder per press, mirroring the
-  // backend opening a fresh Deepgram connection per press. Recreating both
-  // together is what keeps them in sync (see backend comments).
+  // Push-to-talk speech recognition:
+  // Transcribes user speech locally in real-time into `draft`.
+  // Releasing the mic NEVER triggers LLM processing on the backend;
+  // it only places the final transcript in the editable text box.
   // -----------------------------------------------------------------
+
+  const stopRecordingInternal = useCallback(() => {
+    if (!isRecordingRef.current) return;
+    isRecordingRef.current = false;
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // already stopped
+      }
+      recognitionRef.current = null;
+    }
+
+    setMicState("paused");
+  }, []);
 
   const startRecording = useCallback(() => {
     if (micState !== "idle" && micState !== "paused") return;
     if (isRecordingRef.current) return;
 
-    // Clear draft immediately so the old transcript doesn't flash
-    // while we wait for the new partial_transcript to arrive.
+    // Reset draft for the new dictation
     setDraftState("");
-
     deadlineTickingRef.current = false;
     setResponseDeadlineSeconds(null);
 
-    void (async () => {
-      ensureAudioContext();
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch (err) {
-        setErrorMessage(
-          `Microphone access error: ${err instanceof Error ? err.message : String(err)} — you can still type your answer.`,
-        );
-        return;
-      }
+    const win = window as unknown as IWindowWithSpeech;
+    const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
 
-      micStreamRef.current = stream;
-      const recorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (e) => {
-        if (e.data.size === 0) return;
-        const socket = socketRef.current;
-        if (!socket || socket.readyState !== WebSocket.OPEN) return;
-        void e.data.arrayBuffer().then((buf) => {
-          if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-            socketRef.current.send(buf);
+    if (!SpeechRecognition) {
+      setErrorMessage("Voice recognition is not supported in this browser. You can type your answers directly.");
+      setMicState("paused");
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onresult = (event: any) => {
+        let interim = "";
+        let final = "";
+        for (let i = 0; i < event.results.length; i++) {
+          const res = event.results[i];
+          if (res && res[0]) {
+            if (res.isFinal) {
+              final += res[0].transcript + " ";
+            } else {
+              interim += res[0].transcript;
+            }
           }
-        });
+        }
+        const combined = (final + interim).trim();
+        if (combined) {
+          setDraftState(combined);
+        }
       };
-      recorder.start(250);
 
+      recognition.onerror = (event: any) => {
+        if (event.error !== "no-speech" && event.error !== "aborted") {
+          console.warn("Speech recognition warning:", event.error);
+        }
+      };
+
+      recognition.onend = () => {
+        if (isRecordingRef.current) {
+          try {
+            recognition.start();
+          } catch {
+            // ignore
+          }
+        }
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
       isRecordingRef.current = true;
       setMicState("listening");
-
-      const socket = socketRef.current;
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "ptt_start" }));
-      }
-    })();
-  }, [micState, ensureAudioContext]);
-
-  const stopRecordingInternal = useCallback((notifyServer: boolean) => {
-    if (!isRecordingRef.current) return;
-    isRecordingRef.current = false;
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch {
-        // already stopped
-      }
+    } catch (err) {
+      setErrorMessage(
+        `Microphone access error: ${err instanceof Error ? err.message : String(err)} — you can still type your answer.`,
+      );
+      setMicState("paused");
     }
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((t) => t.stop());
-    }
-    mediaRecorderRef.current = null;
-    micStreamRef.current = null;
-
-    if (notifyServer) {
-      const socket = socketRef.current;
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "ptt_stop" }));
-      }
-    }
-  }, []);
+  }, [micState]);
 
   const stopRecording = useCallback(() => {
-    if (!isRecordingRef.current) return;
-    stopRecordingInternal(true);
-    // Optimistic — the server always replies with either draft_ready or
-    // no_speech_detected+ready, so this is guaranteed to resolve either way.
-    setMicState("processing");
+    stopRecordingInternal();
   }, [stopRecordingInternal]);
 
+  // Explicit send to LLM triggered ONLY by the Up Arrow button
   const sendAnswer = useCallback(() => {
     const text = draft.trim();
     if (!text) return;
@@ -360,14 +373,18 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
       setErrorMessage("Connection not ready yet — please wait a moment and try again.");
       return;
     }
+
+    // Send the turn to the backend WebSocket to run the LLM graph
     socket.send(JSON.stringify({ type: "typed_turn", text }));
+    // Optimistically render candidate's submitted answer
+    setMessages((prev) => [...prev, { id: nextMessageIdRef.current++, role: "user", text }]);
     setDraftState("");
     setMicState("processing");
   }, [draft]);
 
   useEffect(
     () => () => {
-      stopRecordingInternal(false);
+      stopRecordingInternal();
       if (audioCtxRef.current) void audioCtxRef.current.close();
     },
     [stopRecordingInternal],
@@ -392,3 +409,4 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
     firstAudioReceived,
   };
 }
+
