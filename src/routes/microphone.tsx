@@ -139,7 +139,7 @@ function Microphone() {
       <AppHeader />
 
       {/* Mobile */}
-      <main className="flex flex-1 flex-col px-4 pb-6 pt-14 md:hidden">
+      <main className="flex flex-1 flex-col px-4 pb-4 pt-6 md:hidden">
         <Body />
         <div className="flex-1" />
         <ContinueButton onClick={handleContinue} loading={loading} error={error} />

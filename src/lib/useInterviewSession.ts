@@ -23,6 +23,7 @@ interface UseInterviewSessionResult {
   responseDeadlineSeconds: number | null;
   finished: boolean;
   errorMessage: string | null;
+  firstAudioReceived: boolean;
 }
 
 /**
@@ -44,6 +45,9 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
   const [responseDeadlineSeconds, setResponseDeadlineSeconds] = useState<number | null>(null);
   const [finished, setFinished] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Flips true the moment the first binary audio chunk arrives — used to hide
+  // the chat UI until the intro audio actually starts playing.
+  const [firstAudioReceived, setFirstAudioReceived] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -162,6 +166,8 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
       if (typeof event.data !== "string") {
         // Stream-play each binary chunk immediately as it arrives
         if (receivingAudioRef.current) scheduleChunk(event.data as ArrayBuffer);
+        // Signal that the first utterance has started so the chat UI reveals itself
+        setFirstAudioReceived(true);
         return;
       }
 
@@ -383,5 +389,6 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
     responseDeadlineSeconds,
     finished,
     errorMessage,
+    firstAudioReceived,
   };
 }

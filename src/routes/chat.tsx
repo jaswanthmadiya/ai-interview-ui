@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlignLeft, ArrowUp, CheckCircle2, Keyboard, Mic } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { useInterviewSession } from "@/lib/useInterviewSession";
@@ -52,6 +52,43 @@ function Waveform() {
         <span key={i} className="w-[2px] rounded-full bg-primary" style={{ height: h }} />
       ))}
     </span>
+  );
+}
+
+/** WhatsApp-style three-dot typing animation */
+function TypingDots() {
+  return (
+    <span className="flex items-center gap-[5px] px-1 py-1">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="size-2 rounded-full bg-muted-foreground"
+          style={{
+            animation: `typingBounce 1.2s ease-in-out ${i * 0.2}s infinite`,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** Full-screen loading overlay shown while waiting for the first intro audio */
+function IntroLoader() {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-background">
+      <div className="flex items-center gap-2">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="size-3 rounded-full bg-primary"
+            style={{
+              animation: `typingBounce 1.2s ease-in-out ${i * 0.2}s infinite`,
+            }}
+          />
+        ))}
+      </div>
+      <p className="text-sm text-muted-foreground">Preparing your interview…</p>
+    </div>
   );
 }
 
@@ -159,6 +196,8 @@ function Chat() {
   const navigate = useNavigate();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [typingMode, setTypingMode] = useState(false);
+  // Ref for the live transcript box so we can auto-scroll to the latest words
+  const draftScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const id = getStoredSessionId();
@@ -183,6 +222,7 @@ function Chat() {
     responseDeadlineSeconds,
     finished,
     errorMessage,
+    firstAudioReceived,
   } = session;
 
   const openingLine = useMemo(() => getStoredOpeningLine(), []);
@@ -207,6 +247,13 @@ function Chat() {
   const busy = micState === "processing" || micState === "ai_speaking";
   const showTextarea = micState === "paused" || typingMode;
   const listening = micState === "listening";
+
+  // Auto-scroll the transcription box to bottom whenever draft updates
+  useEffect(() => {
+    if (draftScrollRef.current) {
+      draftScrollRef.current.scrollTop = draftScrollRef.current.scrollHeight;
+    }
+  }, [draft]);
 
   const timerLabel = finished
     ? undefined
@@ -267,10 +314,14 @@ function Chat() {
 
       {listening ? (
         <div className="flex flex-col items-end gap-2">
-          <p className="max-w-[85%] rounded-xl border border-dashed border-primary bg-accent/60 px-4 py-3 text-[15px] leading-relaxed md:max-w-[70%] md:py-2.5">
+          {/* Fixed-height transcription box — never grows, newest words always scroll into view */}
+          <div
+            ref={draftScrollRef}
+            className="h-28 w-full max-w-[85%] overflow-y-auto overscroll-contain rounded-xl border border-dashed border-primary bg-accent/60 px-4 py-3 text-[15px] leading-relaxed md:max-w-[70%]"
+          >
             {draft}
             <span className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[3px] animate-pulse bg-primary" />
-          </p>
+          </div>
           <span className="mr-auto flex items-center gap-2 text-sm font-medium text-primary md:mr-0">
             <Waveform />
             Listening
@@ -287,9 +338,13 @@ function Chat() {
       ) : null}
 
       {busy ? (
-        <div className="flex justify-center">
-          <span className="rounded-full bg-secondary px-4 py-2 text-[13px] text-muted-foreground">
-            {micState === "ai_speaking" ? "Interviewer is speaking…" : "Thinking…"}
+        <div className="flex">
+          <span className="flex items-center gap-2 rounded-2xl bg-bubble px-4 py-3 text-bubble-foreground">
+            {micState === "ai_speaking" ? (
+              <span className="text-[13px] text-muted-foreground">Interviewer is speaking…</span>
+            ) : (
+              <TypingDots />
+            )}
           </span>
         </div>
       ) : null}
@@ -306,6 +361,9 @@ function Chat() {
 
   return (
     <>
+      {/* Full-screen intro loader — shown until the first audio utterance fires */}
+      {!firstAudioReceived ? <IntroLoader /> : null}
+
       {/* Full-screen Thank You overlay when interview ends */}
       {finished ? <ThankYouScreen /> : null}
 
