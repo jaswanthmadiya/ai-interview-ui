@@ -3,10 +3,8 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
-  CheckCircle2,
   Loader2,
   TriangleAlert,
-  XCircle,
 } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { api, type InterviewReport } from "@/lib/api";
@@ -18,52 +16,7 @@ export const Route = createFileRoute("/report/$sessionId")({
   component: ReportPage,
 });
 
-// ─── recommendation normalisation ─────────────────────────────────────────────
-// The backend returns `recommendation` as either a short keyword ("advance",
-// "reject", "hold") OR a full English sentence ("Proceed with candidacy…").
-// This function detects the intent from the raw string so both forms work.
-
-type RecStyle = { bg: string; icon: React.ReactNode; label: string };
-
-function parseRecommendation(raw: string): RecStyle {
-  const s = raw.toLowerCase();
-
-  const isAdvance =
-    s === "advance" ||
-    s.includes("proceed") ||
-    s.includes("advance") ||
-    s.includes("recommend") ||
-    s.includes("strong potential") ||
-    s.includes("suitable");
-
-  const isReject =
-    s === "reject" ||
-    s.includes("reject") ||
-    s.includes("not recommend") ||
-    s.includes("do not proceed") ||
-    s.includes("decline");
-
-  if (isAdvance) {
-    return {
-      bg: "border-primary/30 bg-primary/8 text-primary",
-      icon: <CheckCircle2 className="size-5" />,
-      label: "Advance",
-    };
-  }
-  if (isReject) {
-    return {
-      bg: "border-destructive/30 bg-destructive/8 text-destructive",
-      icon: <XCircle className="size-5" />,
-      label: "Reject",
-    };
-  }
-  return {
-    bg: "border-border bg-secondary text-secondary-foreground",
-    icon: null,
-    label: "Hold",
-  };
-}
-
+// ─── style maps ───────────────────────────────────────────────────────────────
 
 const TIER_STYLE: Record<string, string> = {
   strong: "border-l-primary",
@@ -119,7 +72,6 @@ function ReportPage() {
       .finally(() => setLoading(false));
   }, [sessionId]);
 
-  const rec = report ? parseRecommendation(report.recommendation) : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -162,12 +114,10 @@ function ReportPage() {
                 <h2 className="mt-0.5 text-xl font-bold">{report.candidate_name ?? "—"}</h2>
                 <p className="mt-0.5 text-sm text-muted-foreground">{report.job_title}</p>
               </div>
-              {rec ? (
-                <div
-                  className={`flex items-center gap-2 rounded-2xl border px-4 py-2.5 font-semibold ${rec.bg}`}
-                >
-                  {rec.icon}
-                  <span className="text-sm uppercase tracking-wide">{rec.label}</span>
+              {report.recommendation ? (
+                <div className="mt-3 rounded-xl border border-border bg-background px-4 py-3 sm:mt-0 sm:max-w-[55%]">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Recommendation</p>
+                  <p className="mt-1 text-[14px] leading-relaxed">{report.recommendation}</p>
                 </div>
               ) : null}
             </div>
