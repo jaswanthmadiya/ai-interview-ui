@@ -97,57 +97,27 @@ function IntroLoader() {
 function MicButton({
   listening,
   disabled,
-  onHoldStart,
-  onHoldEnd,
+  onToggle,
   size = 72,
 }: {
   listening: boolean;
   disabled?: boolean;
-  onHoldStart: () => void;
-  onHoldEnd: () => void;
+  onToggle: () => void;
   size?: number;
 }) {
-  const isPressing = useRef(false);
-
-  const startHold = (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    if (disabled || isPressing.current) return;
-    isPressing.current = true;
-    onHoldStart();
-  };
-
-  const endHold = (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    if (!isPressing.current) return;
-    isPressing.current = false;
-    onHoldEnd();
-  };
-
   return (
     <button
       type="button"
-      aria-label="Hold to speak"
+      aria-label={listening ? "Stop speaking" : "Tap to speak"}
       disabled={disabled}
-      onMouseDown={startHold}
-      onMouseUp={endHold}
-      onMouseLeave={endHold}
-      onTouchStart={startHold}
-      onTouchEnd={endHold}
-      onTouchCancel={endHold}
-      onContextMenu={(e) => e.preventDefault()}
-      className="relative flex items-center justify-center rounded-full outline-none disabled:opacity-40 select-none touch-none"
-      style={{
-        width: size,
-        height: size,
-        WebkitUserSelect: "none",
-        WebkitTouchCallout: "none",
-        touchAction: "none",
-      }}
+      onClick={onToggle}
+      className="relative flex items-center justify-center rounded-full outline-none disabled:opacity-40 select-none transition-transform active:scale-95"
+      style={{ width: size, height: size }}
     >
       {listening ? (
         <>
-          <span className="absolute inset-[-24px] pointer-events-none rounded-full bg-primary/10 select-none" />
-          <span className="absolute inset-[-12px] pointer-events-none rounded-full bg-primary/20 select-none" />
+          <span className="absolute inset-[-24px] pointer-events-none rounded-full bg-primary/15 animate-pulse" />
+          <span className="absolute inset-[-12px] pointer-events-none rounded-full bg-primary/25" />
         </>
       ) : null}
       <span
@@ -166,11 +136,13 @@ function MicButton({
 
 function HoldToSpeakPillButton({
   disabled,
+  listening,
   onHoldStart,
   onHoldEnd,
   isDesktop = false,
 }: {
   disabled?: boolean;
+  listening?: boolean;
   onHoldStart: () => void;
   onHoldEnd: () => void;
   isDesktop?: boolean;
@@ -190,6 +162,35 @@ function HoldToSpeakPillButton({
     isPressing.current = false;
     onHoldEnd();
   };
+
+  const handleMobileClick = () => {
+    if (disabled) return;
+    if (listening) {
+      onHoldEnd();
+    } else {
+      onHoldStart();
+    }
+  };
+
+  if (!isDesktop) {
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={handleMobileClick}
+        className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 select-none ${
+          listening
+            ? "bg-primary text-primary-foreground shadow-sm"
+            : "bg-accent text-primary hover:bg-accent/80"
+        }`}
+      >
+        <Mic className="size-4 pointer-events-none select-none" />
+        <span className="pointer-events-none select-none">
+          {listening ? "Stop Speaking" : "Tap to Speak"}
+        </span>
+      </button>
+    );
+  }
 
   return (
     <button
@@ -211,13 +212,7 @@ function HoldToSpeakPillButton({
     >
       <Mic className="size-4 pointer-events-none select-none" />
       <span className="pointer-events-none select-none">
-        {isDesktop ? (
-          <>
-            Hold <KeyCap className="border-primary/40 text-primary">Space</KeyCap> to Speak
-          </>
-        ) : (
-          "Hold to Speak"
-        )}
+        Hold <KeyCap className="border-primary/40 text-primary">Space</KeyCap> to Speak
       </span>
     </button>
   );
@@ -530,6 +525,7 @@ function Chat() {
                     </button>
                     <HoldToSpeakPillButton
                       disabled={busy}
+                      listening={listening}
                       onHoldStart={startRecording}
                       onHoldEnd={handleHoldEnd}
                       isDesktop={false}
@@ -545,12 +541,12 @@ function Chat() {
               <div className="flex flex-col items-center">
                 {listening ? (
                   <p className="mb-4 text-sm font-medium text-primary">
-                    Release to edit and submit
+                    Tap the mic when done speaking
                   </p>
                 ) : (
                   <div className="relative mb-4">
                     <p className="rounded-lg bg-popover px-3 py-2 text-[13px] text-popover-foreground">
-                      {busy ? "Please wait…" : "Press and hold while you speak"}
+                      {busy ? "Please wait…" : "Tap the mic to speak"}
                     </p>
                     <span className="absolute left-1/2 top-full size-2 -translate-x-1/2 -translate-y-1 rotate-45 bg-popover" />
                   </div>
@@ -558,8 +554,7 @@ function Chat() {
                 <MicButton
                   listening={listening}
                   disabled={busy || finished}
-                  onHoldStart={startRecording}
-                  onHoldEnd={handleHoldEnd}
+                  onToggle={() => (listening ? handleHoldEnd() : startRecording())}
                 />
                 <div className="mt-6 flex w-full items-center justify-between">
                   <IconChip label="Type your answer" onClick={() => setTypingMode(true)} />
