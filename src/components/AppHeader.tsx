@@ -8,26 +8,25 @@ export function AppHeader({
 }) {
   return (
     <header className="sticky top-0 z-20 bg-background">
-      <div className="flex items-center gap-3 px-4 py-3 md:px-6 md:py-4">
-        <div className="flex items-center gap-3 md:flex-1">
-          <Logo size={32} />
-          <span className="text-base font-semibold tracking-tight md:hidden">
+      <div className="relative flex items-center justify-between px-4 py-3.5 md:px-8 md:py-4">
+        <div className="flex items-center gap-2">
+          <Logo size={28} />
+        </div>
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+          <span className="text-sm font-semibold tracking-tight sm:text-base md:text-lg text-foreground">
             AI Chat Simulation
           </span>
         </div>
-        <h1 className="hidden text-xl font-semibold tracking-tight md:block">
-          AI Chat Simulation
-        </h1>
-        <div className="flex flex-1 items-center justify-end">
+        <div className="flex items-center justify-end">
           {timer ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-timer/30 px-3 py-1.5 text-sm font-medium text-timer">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-timer/30 px-3 py-1.5 text-xs font-medium text-timer sm:text-sm">
               <Clock className="size-4" />
               {timer}
             </span>
           ) : null}
         </div>
       </div>
-      <div className="h-px w-full bg-border" />
+      <div className="h-px w-full bg-border/60" />
     </header>
   );
 }

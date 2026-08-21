@@ -105,35 +105,117 @@ function MicButton({
   onHoldEnd: () => void;
   size?: number;
 }) {
+  const isPressing = useRef(false);
+
+  const startHold = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (disabled || isPressing.current) return;
+    isPressing.current = true;
+    onHoldStart();
+  };
+
+  const endHold = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!isPressing.current) return;
+    isPressing.current = false;
+    onHoldEnd();
+  };
+
   return (
     <button
       type="button"
       aria-label="Hold to speak"
       disabled={disabled}
-      onPointerDown={(e) => {
-        e.preventDefault();
-        if (!disabled) onHoldStart();
+      onMouseDown={startHold}
+      onMouseUp={endHold}
+      onMouseLeave={endHold}
+      onTouchStart={startHold}
+      onTouchEnd={endHold}
+      onTouchCancel={endHold}
+      onContextMenu={(e) => e.preventDefault()}
+      className="relative flex items-center justify-center rounded-full outline-none disabled:opacity-40 select-none touch-none"
+      style={{
+        width: size,
+        height: size,
+        WebkitUserSelect: "none",
+        WebkitTouchCallout: "none",
+        touchAction: "none",
       }}
-      onPointerUp={onHoldEnd}
-      onPointerLeave={onHoldEnd}
-      className="relative flex items-center justify-center rounded-full outline-none disabled:opacity-40"
-      style={{ width: size, height: size }}
     >
       {listening ? (
         <>
-          <span className="absolute inset-[-24px] rounded-full bg-primary/10" />
-          <span className="absolute inset-[-12px] rounded-full bg-primary/20" />
+          <span className="absolute inset-[-24px] pointer-events-none rounded-full bg-primary/10 select-none" />
+          <span className="absolute inset-[-12px] pointer-events-none rounded-full bg-primary/20 select-none" />
         </>
       ) : null}
       <span
-        className="relative flex items-center justify-center rounded-full bg-primary"
+        className="relative flex pointer-events-none items-center justify-center rounded-full bg-primary select-none"
         style={{ width: size, height: size }}
       >
         <Mic
-          className="text-primary-foreground"
+          className="text-primary-foreground pointer-events-none select-none"
           style={{ width: size / 2.8, height: size / 2.8 }}
           strokeWidth={2}
         />
+      </span>
+    </button>
+  );
+}
+
+function HoldToSpeakPillButton({
+  disabled,
+  onHoldStart,
+  onHoldEnd,
+  isDesktop = false,
+}: {
+  disabled?: boolean;
+  onHoldStart: () => void;
+  onHoldEnd: () => void;
+  isDesktop?: boolean;
+}) {
+  const isPressing = useRef(false);
+
+  const startHold = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (disabled || isPressing.current) return;
+    isPressing.current = true;
+    onHoldStart();
+  };
+
+  const endHold = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!isPressing.current) return;
+    isPressing.current = false;
+    onHoldEnd();
+  };
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onMouseDown={startHold}
+      onMouseUp={endHold}
+      onMouseLeave={endHold}
+      onTouchStart={startHold}
+      onTouchEnd={endHold}
+      onTouchCancel={endHold}
+      onContextMenu={(e) => e.preventDefault()}
+      className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-primary hover:bg-accent/80 transition-colors disabled:opacity-40 select-none touch-none"
+      style={{
+        WebkitUserSelect: "none",
+        WebkitTouchCallout: "none",
+        touchAction: "none",
+      }}
+    >
+      <Mic className="size-4 pointer-events-none select-none" />
+      <span className="pointer-events-none select-none">
+        {isDesktop ? (
+          <>
+            Hold <KeyCap className="border-primary/40 text-primary">Space</KeyCap> to Speak
+          </>
+        ) : (
+          "Hold to Speak"
+        )}
       </span>
     </button>
   );
@@ -448,16 +530,12 @@ function Chat() {
                     >
                       {draft ? "Clear" : "Close"}
                     </button>
-                    <button
-                      type="button"
-                      onPointerDown={() => !busy && startRecording()}
-                      onPointerUp={handleHoldEnd}
+                    <HoldToSpeakPillButton
                       disabled={busy}
-                      className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-primary disabled:opacity-40"
-                    >
-                      <Mic className="size-4" />
-                      Hold to Speak
-                    </button>
+                      onHoldStart={startRecording}
+                      onHoldEnd={handleHoldEnd}
+                      isDesktop={false}
+                    />
                     <SendButton active={draft.trim().length > 0 && !busy} onClick={handleSend} />
                   </div>
                 </div>
@@ -560,16 +638,12 @@ function Chat() {
                           </button>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onPointerDown={() => !busy && startRecording()}
-                        onPointerUp={handleHoldEnd}
+                      <HoldToSpeakPillButton
                         disabled={busy}
-                        className="flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-medium text-primary hover:bg-accent/80 transition-colors disabled:opacity-40"
-                      >
-                        <Mic className="size-4" />
-                        Hold <KeyCap className="border-primary/40 text-primary">Space</KeyCap> to Speak
-                      </button>
+                        onHoldStart={startRecording}
+                        onHoldEnd={handleHoldEnd}
+                        isDesktop={true}
+                      />
                       <SendButton active={draft.trim().length > 0 && !busy} onClick={handleSend} />
                     </div>
                   </div>

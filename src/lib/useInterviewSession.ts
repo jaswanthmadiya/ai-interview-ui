@@ -138,6 +138,7 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
   const setDraft = useCallback((value: string) => setDraftState(value), []);
 
   const clearDraft = useCallback(() => {
+    existingDraftRef.current = "";
     setDraftState("");
   }, []);
 
@@ -289,12 +290,14 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
     setMicState("paused");
   }, []);
 
+  const existingDraftRef = useRef<string>("");
+
   const startRecording = useCallback(() => {
     if (micState !== "idle" && micState !== "paused") return;
     if (isRecordingRef.current) return;
 
-    // Reset draft for the new dictation
-    setDraftState("");
+    // Preserve existing draft so re-pressing Space bar or mic button appends to the current text
+    existingDraftRef.current = draft.trim();
     deadlineTickingRef.current = false;
     setResponseDeadlineSeconds(null);
 
@@ -326,8 +329,10 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
             }
           }
         }
-        const combined = (final + interim).trim();
-        if (combined) {
+        const newSpeech = (final + interim).trim();
+        if (newSpeech) {
+          const base = existingDraftRef.current;
+          const combined = base ? `${base} ${newSpeech}` : newSpeech;
           setDraftState(combined);
         }
       };
@@ -378,6 +383,7 @@ export function useInterviewSession(sessionId: string | null): UseInterviewSessi
     socket.send(JSON.stringify({ type: "typed_turn", text }));
     // Optimistically render candidate's submitted answer
     setMessages((prev) => [...prev, { id: nextMessageIdRef.current++, role: "user", text }]);
+    existingDraftRef.current = "";
     setDraftState("");
     setMicState("processing");
   }, [draft]);

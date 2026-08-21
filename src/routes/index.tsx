@@ -1,13 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { AlignLeft, Clock, Mic, TriangleAlert } from "lucide-react";
+import { Check, TriangleAlert } from "lucide-react";
 import { z } from "zod";
 import { AppHeader } from "@/components/AppHeader";
 import { Logo } from "@/components/Logo";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { api, type AssessmentPublicInfo } from "@/lib/api";
-import { setStoredAssessmentId, setStoredCandidateName } from "@/lib/interviewIdentity";
+import {
+  getStoredCandidateName,
+  setStoredAssessmentId,
+  setStoredCandidateName,
+} from "@/lib/interviewIdentity";
 
 const searchSchema = z.object({
   assessment_id: z.string().optional(),
@@ -17,102 +18,57 @@ export const Route = createFileRoute("/")({
   validateSearch: searchSchema,
   head: () => ({
     meta: [
-      { title: "Welcome — PAI" },
+      { title: "Welcome — AI Chat Simulation" },
       {
         name: "description",
         content:
-          "Speak or type your answers to a technical simulation and review every answer before it's sent.",
+          "Participate in a 10–15 minute voice conversation with an AI character based on a realistic workplace situation.",
       },
-      { property: "og:title", content: "AI Chat Simulation — Before you Begin" },
+      { property: "og:title", content: "AI Business Simulation — AI Chat Simulation" },
       {
         property: "og:description",
         content:
-          "Speak or type your answers to a technical simulation and review every answer before it's sent.",
+          "Participate in a 10–15 minute voice conversation with an AI character based on a realistic workplace situation.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  component: Landing,
+  component: OnboardingFlow,
 });
 
-function Splash() {
+/** Centered Loading Animation with thin line progress bar per reference design */
+function LoadingAnimation({ progress }: { progress: number }) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-between bg-background px-10 py-24">
-      <div className="flex flex-1 flex-col items-center justify-center gap-4">
-        <Logo size={44} />
-        <p className="text-lg font-semibold tracking-tight">AI Chat Simulation</p>
-      </div>
-      <div className="h-1.5 w-40 overflow-hidden rounded-full bg-border">
-        <div className="h-full w-1/4 animate-[loading_1.4s_ease-in-out_infinite] rounded-full bg-primary" />
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background px-6">
+      <div className="flex flex-col items-center justify-center text-center">
+        {/* Centered Logo */}
+        <Logo size={68} />
+
+        {/* Title */}
+        <h1 className="mt-8 text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-[32px]">
+          AI Chat Simulation
+        </h1>
+
+        {/* Thin Line Progress Bar */}
+        <div className="mt-12 h-1 w-[280px] overflow-hidden rounded-full bg-secondary/80 sm:w-[380px] md:w-[420px]">
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-75 ease-out"
+            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
-function Facts({ info, className = "" }: { info: AssessmentPublicInfo; className?: string }) {
-  const facts = [
-    {
-      icon: Clock,
-      label: info.time_budget_minutes ? `${info.time_budget_minutes} minutes` : "Untimed",
-    },
-    { icon: AlignLeft, label: `${info.num_questions} Questions` },
-    { icon: Mic, label: "Speak or type, switch anytime." },
-  ];
-  return (
-    <ul className={className}>
-      {facts.map(({ icon: Icon, label }, i) => (
-        <li
-          key={label}
-          className={`flex items-center gap-3 py-4 ${i < facts.length - 1 ? "border-b border-border" : ""
-            }`}
-        >
-          <Icon className="size-5 shrink-0 text-foreground" strokeWidth={1.75} />
-          <span className={i === 0 ? "text-[15px] font-medium" : "text-[15px] font-semibold"}>
-            {label}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function Note({ className = "" }: { className?: string }) {
-  return (
-    <p
-      className={`rounded-xl bg-secondary px-4 py-3 text-[13px] leading-relaxed text-muted-foreground ${className}`}
-    >
-      Find a quiet place. Audio is never stored, only your final test answers are share with the
-      team.
-    </p>
-  );
-}
-
-function NameField({
-  value,
-  onChange,
-  className = "",
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  className?: string;
-}) {
-  return (
-    <div className={className}>
-      <Label htmlFor="candidate-name" className="mb-2 block text-[13px] text-muted-foreground">
-        Your full name
-      </Label>
-      <Input
-        id="candidate-name"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="e.g. Priya Sharma"
-        className="h-12 rounded-2xl px-4 text-[15px]"
-        autoComplete="name"
-      />
-    </div>
-  );
-}
+const CHECKLIST_ITEMS = [
+  "Respond as you would in a real professional conversation.",
+  "Ask questions whenever you need more information.",
+  "There may be no single correct answer.",
+  "No specialized knowledge of finance or markets is required.",
+  "This is not a test of English fluency or accent.",
+];
 
 function MissingLinkNotice() {
   return (
@@ -130,89 +86,180 @@ function MissingLinkNotice() {
   );
 }
 
-function Landing() {
+function OnboardingFlow() {
   const { assessment_id: assessmentId } = Route.useSearch();
   const navigate = useNavigate();
 
-  const [splashDone, setSplashDone] = useState(false);
-  const [info, setInfo] = useState<AssessmentPublicInfo | null>(null);
-  const [loadError, setLoadError] = useState(false);
-  const [name, setName] = useState("");
-
-  useEffect(() => {
-    const t = setTimeout(() => setSplashDone(true), 1200);
-    return () => clearTimeout(t);
-  }, []);
+  // Step order: 0 = First Loading Animation, 1 = Landing Page, 2 = Your Scenario Page
+  const [step, setStep] = useState<0 | 1 | 2>(0);
+  const [loadingProgress, setLoadingProgress] = useState(0);
 
   useEffect(() => {
     if (!assessmentId) return;
     setStoredAssessmentId(assessmentId);
-    api
-      .getAssessmentPublicInfo(assessmentId)
-      .then(setInfo)
-      .catch(() => setLoadError(true));
+    if (!getStoredCandidateName()) {
+      setStoredCandidateName("Candidate");
+    }
   }, [assessmentId]);
 
-  const handleStart = () => {
-    if (!name.trim()) return;
-    setStoredCandidateName(name.trim());
+  // Initial Loading Animation ticker (runs FIRST when visiting /)
+  useEffect(() => {
+    if (step !== 0) return;
+    setLoadingProgress(0);
+    const interval = setInterval(() => {
+      setLoadingProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setTimeout(() => setStep(1), 150); // Move to Step 1 (Landing Page)
+          return 100;
+        }
+        return prev + 5;
+      });
+    }, 40);
+    return () => clearInterval(interval);
+  }, [step]);
+
+  const handleStartConversation = () => {
     void navigate({ to: "/microphone" });
   };
 
   if (!assessmentId) return <MissingLinkNotice />;
-  if (!splashDone || (!info && !loadError)) return <Splash />;
-
-  const canStart = name.trim().length > 0;
-
-  const StartButton = (
-    <button
-      type="button"
-      disabled={!canStart}
-      onClick={handleStart}
-      className="flex h-14 w-full items-center justify-center rounded-2xl bg-primary text-[15px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      Get Started
-    </button>
-  );
+  if (step === 0) return <LoadingAnimation progress={loadingProgress} />;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <AppHeader />
 
-      {/* Mobile */}
-      <main className="flex flex-1 flex-col px-4 pb-6 pt-6 md:hidden">
-        <h2 className="text-[28px] font-bold leading-tight tracking-tight">Before you Begin</h2>
-        <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
-          {info ? info.job_title : "Speak or type and review every answer before its sent."}
-        </p>
-        {info ? <Facts info={info} className="mt-6" /> : null}
-        <NameField value={name} onChange={setName} className="mt-6" />
-        <div className="flex-1" />
-        <Note className="mb-4" />
-        {StartButton}
-      </main>
+      {step === 1 ? (
+        /* STEP 1: LANDING PAGE */
+        <main className="flex flex-1 flex-col justify-between px-5 pb-8 pt-6 md:justify-center md:px-8 md:py-12">
+          <div className="mx-auto w-full max-w-5xl">
+            {/* Desktop grid & Mobile stacked */}
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-14 lg:gap-16 items-start">
+              {/* Left Column */}
+              <div className="flex flex-col">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-[34px] leading-tight">
+                  AI Business Simulation
+                </h1>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-[15px] max-w-md">
+                  You will participate in a 10–15 minute voice conversation with an AI character
+                  based on a realistic workplace situation.
+                </p>
 
-      {/* Desktop */}
-      <main className="hidden flex-1 items-center justify-center px-8 md:flex">
-        <div className="w-full max-w-[1050px] pb-16">
-          <div className="grid grid-cols-2 gap-16">
-            <div>
-              <h2 className="text-[40px] font-bold leading-tight tracking-tight">
-                Before you Begin
-              </h2>
-              <p className="mt-2 max-w-sm text-base leading-relaxed text-muted-foreground">
-                {info ? info.job_title : "Speak or type and review every answer before its sent."}
-              </p>
-              <Note className="mt-6 max-w-sm" />
+                {/* Desktop Note */}
+                <div className="hidden mt-8 max-w-md rounded-xl bg-secondary/70 p-4 text-xs sm:text-sm text-muted-foreground leading-relaxed md:block">
+                  Please use a quiet environment and check your microphone before starting.
+                </div>
+
+                {/* Desktop Button */}
+                <div className="hidden mt-8 md:block">
+                  <button
+                    type="button"
+                    onClick={() => setStep(2)}
+                    className="flex h-12 items-center justify-center rounded-xl bg-primary px-10 text-sm font-medium text-primary-foreground shadow-xs transition-all hover:bg-primary/90 active:scale-[0.99]"
+                  >
+                    Get Started
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Column: Checklist */}
+              <div className="flex flex-col border-t border-border/60 pt-4 md:border-t-0 md:pt-0">
+                <ul className="w-full">
+                  {CHECKLIST_ITEMS.map((item, idx) => (
+                    <li
+                      key={idx}
+                      className={`flex items-start gap-3 py-3.5 ${
+                        idx < CHECKLIST_ITEMS.length - 1 ? "border-b border-border/60" : ""
+                      }`}
+                    >
+                      <Check className="mt-0.5 size-4.5 shrink-0 text-primary stroke-[2.5]" />
+                      <span className="text-sm font-semibold leading-snug text-foreground sm:text-[15px]">
+                        {item}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
-            {info ? <Facts info={info} className="pt-2" /> : null}
+
+            {/* Mobile Note & Button */}
+            <div className="mt-8 flex flex-col md:hidden">
+              <div className="rounded-xl bg-secondary/70 p-4 text-xs leading-relaxed text-muted-foreground">
+                Find a quiet place. Audio is never stored, only your final test answers are share
+                with the team.
+              </div>
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                className="mt-6 flex h-12 w-full items-center justify-center rounded-xl bg-primary text-sm font-medium text-primary-foreground shadow-xs transition-all hover:bg-primary/90 active:scale-[0.99]"
+              >
+                Get Started
+              </button>
+            </div>
           </div>
-          <div className="mx-auto mt-10 max-w-[400px]">
-            <NameField value={name} onChange={setName} className="mb-4" />
-            {StartButton}
+        </main>
+      ) : (
+        /* STEP 2: YOUR SCENARIO PAGE */
+        <main className="flex flex-1 flex-col px-5 pb-10 pt-6 md:px-8 md:py-12">
+          <div className="mx-auto w-full max-w-2xl">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl md:text-[32px] mb-8">
+              Your Scenario
+            </h1>
+
+            {/* Section 1: YOUR ROLE */}
+            <div className="flex flex-col">
+              <span className="text-xs font-bold uppercase tracking-wider text-primary mb-2">
+                YOUR ROLE
+              </span>
+              <p className="text-sm sm:text-[15px] font-normal leading-relaxed text-foreground">
+                You are a Management Trainee working with a team that manages an important corporate client.
+              </p>
+            </div>
+
+            <div className="my-6 h-px w-full bg-border/60 sm:my-8" />
+
+            {/* Section 2: SITUATION */}
+            <div className="flex flex-col">
+              <span className="text-xs font-bold uppercase tracking-wider text-primary mb-2">
+                SITUATION
+              </span>
+              <p className="text-sm sm:text-[15px] font-normal leading-relaxed text-foreground mb-3">
+                A critical report promised to the client yesterday has not been delivered. The client is unhappy and has requested an urgent conversation.
+              </p>
+              <p className="text-sm sm:text-[15px] font-normal leading-relaxed text-foreground">
+                The senior colleague who normally manages the account is unavailable, and you have been asked to speak with the client.
+              </p>
+            </div>
+
+            <div className="my-6 h-px w-full bg-border/60 sm:my-8" />
+
+            {/* Section 3: YOUR TASK */}
+            <div className="flex flex-col">
+              <span className="text-xs font-bold uppercase tracking-wider text-primary mb-2">
+                YOUR TASK
+              </span>
+              <p className="text-sm sm:text-[15px] font-normal leading-relaxed text-foreground mb-3">
+                Understand the situation and handle the conversation as you would in a real workplace.
+              </p>
+              <p className="text-sm sm:text-[15px] font-normal leading-relaxed text-foreground">
+                You may ask questions, clarify information, and propose whatever course of action you think is appropriate.
+              </p>
+            </div>
+
+            {/* Start Conversation Button */}
+            <div className="mt-10 flex justify-center">
+              <button
+                type="button"
+                onClick={handleStartConversation}
+                className="flex h-12 w-full sm:w-auto sm:px-14 items-center justify-center rounded-xl bg-primary text-sm font-medium text-primary-foreground shadow-xs transition-all hover:bg-primary/90 active:scale-[0.99]"
+              >
+                Start Conversation
+              </button>
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      )}
     </div>
   );
 }
