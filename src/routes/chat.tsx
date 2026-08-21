@@ -4,6 +4,8 @@ import { AlignLeft, ArrowUp, CheckCircle2, Keyboard, Mic } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { useInterviewSession } from "@/lib/useInterviewSession";
 import {
+  getStoredAssessmentMode,
+  getStoredCandidateRoleBriefing,
   getStoredOpeningLine,
   getStoredSessionId,
   getStoredTotalQuestions,
@@ -282,7 +284,9 @@ function Chat() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [typingMode, setTypingMode] = useState(false);
   const [expandedMsgId, setExpandedMsgId] = useState<number | null>(null);
-  
+  const isSituational = useMemo(() => getStoredAssessmentMode() === "situational_simulation", []);
+  const candidateRoleBriefing = useMemo(() => getStoredCandidateRoleBriefing(), []);
+
   // Ref for the live transcription box so we can auto-scroll to the latest words
   const draftScrollRef = useRef<HTMLDivElement>(null);
   // Refs for auto-resizing textareas
@@ -330,9 +334,7 @@ function Chat() {
   const lastUserMsg = [...allMessages].reverse().find((m) => m.role === "user");
   // Only show the user message if it came after the last AI message
   const showLastUser =
-    lastUserMsg &&
-    lastAiMsg &&
-    allMessages.indexOf(lastUserMsg) > allMessages.indexOf(lastAiMsg);
+    lastUserMsg && lastAiMsg && allMessages.indexOf(lastUserMsg) > allMessages.indexOf(lastAiMsg);
 
   const busy = micState === "processing" || micState === "ai_speaking";
   const listening = micState === "listening";
@@ -427,9 +429,7 @@ function Chat() {
               <button
                 type="button"
                 onClick={() =>
-                  setExpandedMsgId(
-                    expandedMsgId === lastUserMsg!.id ? null : lastUserMsg!.id,
-                  )
+                  setExpandedMsgId(expandedMsgId === lastUserMsg!.id ? null : lastUserMsg!.id)
                 }
                 className="text-[11px] text-primary/70 hover:text-primary"
               >
@@ -502,9 +502,7 @@ function Chat() {
         {/* ---------- Mobile ---------- */}
         <div className="flex flex-1 flex-col overflow-hidden md:hidden">
           {/* Message area — fixed, no scroll */}
-          <div className="flex flex-1 flex-col justify-end gap-4 px-4 pt-4">
-            {recentExchange}
-          </div>
+          <div className="flex flex-1 flex-col justify-end gap-4 px-4 pt-4">{recentExchange}</div>
 
           {/* Sticky bottom input area */}
           <div className="shrink-0 px-4 pb-4 pt-2">
@@ -546,7 +544,9 @@ function Chat() {
             ) : (
               <div className="flex flex-col items-center">
                 {listening ? (
-                  <p className="mb-4 text-sm font-medium text-primary">Release to edit and submit</p>
+                  <p className="mb-4 text-sm font-medium text-primary">
+                    Release to edit and submit
+                  </p>
                 ) : (
                   <div className="relative mb-4">
                     <p className="rounded-lg bg-popover px-3 py-2 text-[13px] text-popover-foreground">
@@ -573,44 +573,73 @@ function Chat() {
         {/* ---------- Desktop ---------- */}
         <div className="hidden flex-1 overflow-hidden md:flex">
           <aside className="flex w-[380px] shrink-0 flex-col border-r border-border bg-secondary/40 px-8 py-8">
-            <h2 className="text-lg font-semibold tracking-tight">Current question</h2>
-            <p className="mt-4 text-[15px] leading-relaxed">
-              {lastAiMsg?.text ?? "Loading your first question…"}
-            </p>
-            <div className="flex-1" />
-            <div className="rounded-xl border border-border bg-background px-4 py-3">
-              <p className="flex items-center gap-2 text-sm font-semibold">
-                <AlignLeft className="size-4" strokeWidth={1.75} />
-                Question{" "}
-                {Math.min(currentQuestionIndex + 1, displayTotal || currentQuestionIndex + 1)} of{" "}
-                {displayTotal || "—"}
-              </p>
-              <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                {listening ? (
-                  <>
-                    <span className="size-2.5 rounded-full bg-primary" />
-                    Listening, release <KeyCap>Space</KeyCap> to review & edit.
-                  </>
-                ) : showTextarea ? (
-                  <>
-                    {/* Review and edit your transcript, then click <KeyCap>↑</KeyCap> to submit. */}
-                  </>
-                ) : busy ? (
-                  <>Please wait for the interviewer.</>
-                ) : (
-                  <>
-                    <KeyCap>Space</KeyCap> Hold to speak, release to review.
-                  </>
-                )}
-              </p>
-            </div>
+            {isSituational ? (
+              <>
+                <h2 className="text-lg font-semibold tracking-tight">Your scenario</h2>
+                <div className="mt-4 flex-1 overflow-y-auto pr-1">
+                  {candidateRoleBriefing ? (
+                    candidateRoleBriefing
+                      .split(/\n\s*\n/)
+                      .map((p) => p.trim())
+                      .filter(Boolean)
+                      .map((para, idx) => (
+                        <p key={idx} className="mb-3 text-[14px] leading-relaxed text-foreground">
+                          {para}
+                        </p>
+                      ))
+                  ) : (
+                    <p className="text-[14px] leading-relaxed text-muted-foreground">
+                      Respond as you would in a real professional conversation.
+                    </p>
+                  )}
+                </div>
+                {/* No question-count card here by design — this is one continuous
+                    conversation, not a fixed list of questions, so a "Question X of Y"
+                    counter would be both meaningless (total is always 0) and misleading. */}
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-semibold tracking-tight">Current question</h2>
+                <p className="mt-4 text-[15px] leading-relaxed">
+                  {lastAiMsg?.text ?? "Loading your first question…"}
+                </p>
+                <div className="flex-1" />
+                <div className="rounded-xl border border-border bg-background px-4 py-3">
+                  <p className="flex items-center gap-2 text-sm font-semibold">
+                    <AlignLeft className="size-4" strokeWidth={1.75} />
+                    Question{" "}
+                    {Math.min(
+                      currentQuestionIndex + 1,
+                      displayTotal || currentQuestionIndex + 1,
+                    )}{" "}
+                    of {displayTotal || "—"}
+                  </p>
+                  <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                    {listening ? (
+                      <>
+                        <span className="size-2.5 rounded-full bg-primary" />
+                        Listening, release <KeyCap>Space</KeyCap> to review & edit.
+                      </>
+                    ) : showTextarea ? (
+                      <>
+                        {/* Review and edit your transcript, then click <KeyCap>↑</KeyCap> to submit. */}
+                      </>
+                    ) : busy ? (
+                      <>Please wait for the interviewer.</>
+                    ) : (
+                      <>
+                        <KeyCap>Space</KeyCap> Hold to speak, release to review.
+                      </>
+                    )}
+                  </p>
+                </div>
+              </>
+            )}
           </aside>
 
           <main className="flex flex-1 flex-col overflow-hidden px-10 py-6">
             {/* Message area — grows to fill, content is anchored at bottom */}
-            <div className="flex flex-1 flex-col justify-end gap-4">
-              {recentExchange}
-            </div>
+            <div className="flex flex-1 flex-col justify-end gap-4">{recentExchange}</div>
 
             {/* Sticky bottom input */}
             <div className="shrink-0 pt-4">
@@ -648,7 +677,8 @@ function Chat() {
                     </div>
                   </div>
                   <p className="mt-2.5 text-center text-[13px] text-muted-foreground">
-                    Review & edit your transcript above, then click the arrow button <KeyCap>↑</KeyCap> to submit
+                    Review & edit your transcript above, then click the arrow button{" "}
+                    <KeyCap>↑</KeyCap> to submit
                   </p>
                 </>
               ) : (
@@ -701,4 +731,3 @@ function Chat() {
     </>
   );
 }
-

@@ -129,7 +129,15 @@ function CandidateRow({
 }) {
   const [generating, setGenerating] = useState(false);
 
-  const { session_id, candidate_name, has_resume, status, current_question_index, total_questions, started_at } = candidate;
+  const {
+    session_id,
+    candidate_name,
+    has_resume,
+    status,
+    current_question_index,
+    total_questions,
+    started_at,
+  } = candidate;
 
   const handleReport = async () => {
     if (generating) return;
@@ -162,8 +170,14 @@ function CandidateRow({
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {status === "in_progress" && total_questions > 0 ? (
-            <ProgressPill current={current_question_index} total={total_questions} />
+          {status === "in_progress" ? (
+            candidate.meaningful_turns_completed != null ? (
+              <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                {candidate.meaningful_turns_completed} turns completed
+              </span>
+            ) : total_questions > 0 ? (
+              <ProgressPill current={current_question_index} total={total_questions} />
+            ) : null
           ) : null}
           {started_at ? (
             <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
@@ -201,7 +215,6 @@ function CandidateRow({
   );
 }
 
-
 // ─── candidates modal (slide-over) ────────────────────────────────────────────
 
 const POLL_MS = 15_000;
@@ -228,7 +241,9 @@ function CandidatesModal({
 
   useEffect(() => {
     fetchCandidates();
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assessment.assessment_id]);
 
@@ -238,15 +253,22 @@ function CandidatesModal({
     if (hasLive) {
       intervalRef.current = setInterval(fetchCandidates, POLL_MS);
     } else {
-      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   // Close on Escape
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
@@ -277,9 +299,12 @@ function CandidatesModal({
         {/* header */}
         <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold">{data?.job_title ?? assessment.job_title}</h2>
+            <h2 className="truncate text-lg font-bold">
+              {data?.job_title ?? assessment.job_title}
+            </h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              {assessment.experience_band} · {assessment.total_questions_planned ?? assessment.num_questions} questions
+              {assessment.experience_band} ·{" "}
+              {assessment.total_questions_planned ?? assessment.num_questions} questions
             </p>
             {liveCount > 0 ? (
               <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
@@ -340,11 +365,7 @@ function CandidatesModal({
           ) : (
             <div className="space-y-2">
               {sorted.map((c) => (
-                <CandidateRow
-                  key={c.session_id}
-                  candidate={c}
-                  onViewReport={onViewReport}
-                />
+                <CandidateRow key={c.session_id} candidate={c} onViewReport={onViewReport} />
               ))}
             </div>
           )}
@@ -427,8 +448,16 @@ function AssessmentsPage() {
                   <div className="min-w-0 flex-1">
                     <h2 className="text-lg font-semibold">{a.job_title}</h2>
                     <p className="mt-0.5 text-sm text-muted-foreground">
-                      {a.experience_band} · {a.total_questions_planned ?? a.num_questions} questions
-                      {a.resume_required ? "" : " · no resume"} · published {formatDate(a.created_at)}
+                      {a.assessment_mode === "situational_simulation" ? (
+                        <>{a.experience_band} · live scenario simulation</>
+                      ) : (
+                        <>
+                          {a.experience_band} · {a.total_questions_planned ?? a.num_questions}{" "}
+                          questions
+                          {a.resume_required ? "" : " · no resume"}
+                        </>
+                      )}{" "}
+                      · published {formatDate(a.created_at)}
                     </p>
                   </div>
                   <CopyLinkButton path={a.shareable_link} />
@@ -439,7 +468,11 @@ function AssessmentsPage() {
                   <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
                     v{a.snapshot_version}
                   </span>
-                  {a.resume_required ? (
+                  {a.assessment_mode === "situational_simulation" ? (
+                    <span className="rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
+                      Situational Simulation
+                    </span>
+                  ) : a.resume_required ? (
                     <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
                       Resume required
                     </span>

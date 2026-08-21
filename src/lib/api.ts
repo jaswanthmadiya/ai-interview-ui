@@ -46,6 +46,8 @@ async function request<T>(path: string, init?: RequestInit & { formData?: FormDa
 // field names so drift is easy to spot.
 // ---------------------------------------------------------------------
 
+export type AssessmentMode = "structured_qa" | "situational_simulation";
+
 export interface AssessmentPublicInfo {
   assessment_id: string;
   job_title: string;
@@ -57,6 +59,8 @@ export interface AssessmentPublicInfo {
   company_context: string | null;
   modules: AssessmentModule[];
   resume_required: boolean;
+  assessment_mode?: AssessmentMode;
+  candidate_role_briefing?: string | null;
 }
 
 export interface AssessmentModule {
@@ -160,6 +164,71 @@ export interface JobConfig {
   experience_band: string;
   num_questions: number;
   assessment_config: AssessmentConfig;
+  assessment_mode?: AssessmentMode;
+  scenario?: ScenarioConfig;
+}
+
+// ---------------------------------------------------------------------
+// Situational Simulation Types
+// ---------------------------------------------------------------------
+
+export interface ScenarioHiddenFact {
+  id: string;
+  trigger_description: string;
+  content: string;
+}
+
+export interface ScenarioPhaseGuide {
+  id: string;
+  name: string;
+  guidance: string;
+  scripted_line?: string | null;
+  min_meaningful_turn: number;
+}
+
+export interface ScenarioCompetency {
+  name: string;
+  description: string;
+}
+
+export interface ScenarioConfig {
+  persona_name: string;
+  persona_role: string;
+  persona_traits: string[];
+  situation_briefing: string;
+  candidate_role_briefing: string;
+  opening_statement: string;
+  hidden_facts: ScenarioHiddenFact[];
+  phases: ScenarioPhaseGuide[];
+  competencies: ScenarioCompetency[];
+  forbidden_topics?: string[];
+  never_say_phrases?: string[];
+  min_meaningful_turns?: number;
+  target_meaningful_turns?: number;
+  hard_max_turns?: number;
+  ending_guidance?: string;
+  max_off_topic_strikes?: number;
+}
+
+export interface PublishScenarioAssessmentRequest {
+  job_config: {
+    job_title: string;
+    job_description: string;
+    experience_band: string;
+    assessment_mode: "situational_simulation";
+    scenario: ScenarioConfig;
+    [key: string]: unknown;
+  };
+}
+
+export interface PublishScenarioAssessmentResponse {
+  assessment_id: string;
+  shareable_link: string;
+  snapshot_version: string;
+  sha256_hash: string;
+  opening_line: string;
+  persona_name: string;
+  candidate_role_briefing: string;
 }
 
 export interface PublishAssessmentResponse {
@@ -201,6 +270,12 @@ export interface GrammarAssessment {
   error_examples: string[];
 }
 
+export interface ScenarioReport {
+  conversation_summary: string;
+  facts_uncovered: string[];
+  final_proposal_summary: string;
+}
+
 export interface InterviewReport {
   candidate_name: string | null;
   job_title: string;
@@ -212,6 +287,8 @@ export interface InterviewReport {
   grammar_assessment: GrammarAssessment | null;
   flags: InterviewFlag[];
   recommendation: string;
+  assessment_mode?: AssessmentMode;
+  scenario_report?: ScenarioReport | null;
 }
 
 export interface AssessmentSummary {
@@ -227,6 +304,7 @@ export interface AssessmentSummary {
   created_at: number;           // unix epoch seconds (float)
   shareable_link: string;
   module_names?: string[];      // optional — not returned by current backend
+  assessment_mode?: AssessmentMode;
 }
 
 export interface AssessmentListResponse {
@@ -245,6 +323,7 @@ export interface CandidateEntry {
   total_questions: number;
   started_at: number;              // unix epoch seconds
   report_available: boolean;
+  meaningful_turns_completed?: number | null;
 }
 
 export interface AssessmentCandidatesResponse {
@@ -302,7 +381,6 @@ export const api = {
       `/interview/assessment/${assessmentId}/candidates`,
     ),
 
-
   generateStructure: (body: AssessmentGenerateRequest) =>
     request<AssessmentGenerateResponse>("/interview/assessment/generate-structure", {
       method: "POST",
@@ -313,6 +391,12 @@ export const api = {
     request<PublishAssessmentResponse>("/interview/assessment/publish", {
       method: "POST",
       body: JSON.stringify({ job_config: jobConfig, plan }),
+    }),
+
+  publishScenarioAssessment: (payload: PublishScenarioAssessmentRequest) =>
+    request<PublishScenarioAssessmentResponse>("/interview/assessment/publish-scenario", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 };
 

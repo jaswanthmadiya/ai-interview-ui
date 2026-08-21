@@ -1,11 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { Check, LoaderCircle, Mic } from "lucide-react";
+import { useRef, useState } from "react";
+import { Check, FileText, LoaderCircle, Mic, X } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { api } from "@/lib/api";
 import {
   getStoredAssessmentId,
+  getStoredAssessmentMode,
   getStoredCandidateName,
+  getStoredResumeRequired,
   setStoredOpeningLine,
   setStoredSessionId,
   setStoredTotalQuestions,
@@ -47,14 +49,15 @@ function Body() {
       </div>
       <h2 className="mt-6 text-[28px] font-bold leading-tight tracking-tight">Turn on your Mic</h2>
       <p className="mt-1 text-[15px] leading-relaxed text-muted-foreground">
-        Test uses your microphone to turn speech into test while you answer.
+        This uses your microphone to turn speech into text while you answer.
       </p>
       <ul className="mt-8 w-full">
         {POINTS.map((p, i) => (
           <li
             key={p}
-            className={`flex items-center gap-4 py-4 ${i < POINTS.length - 1 ? "border-b border-border" : ""
-              }`}
+            className={`flex items-center gap-4 py-4 ${
+              i < POINTS.length - 1 ? "border-b border-border" : ""
+            }`}
           >
             <Check className="size-5 shrink-0 text-primary" strokeWidth={2.5} />
             <span className="text-[15px] font-semibold">{p}</span>
@@ -90,16 +93,80 @@ function ContinueButton({
   );
 }
 
+function ResumeUpload({
+  file,
+  onSelect,
+  onClear,
+}: {
+  file: File | null;
+  onSelect: (f: File) => void;
+  onClear: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="mt-8 w-full">
+      <p className="mb-2 text-[13px] font-semibold text-foreground">Upload your resume</p>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.doc,.docx"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onSelect(f);
+        }}
+      />
+      {file ? (
+        <div className="flex items-center justify-between rounded-xl border border-border bg-secondary/40 px-4 py-3">
+          <span className="flex min-w-0 items-center gap-2 text-[14px] font-medium">
+            <FileText className="size-4 shrink-0 text-primary" />
+            <span className="truncate">{file.name}</span>
+          </span>
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label="Remove resume"
+            className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-accent"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="flex w-full items-center justify-center rounded-xl border border-dashed border-border px-4 py-4 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-secondary/40"
+        >
+          Choose a file (PDF or Word)
+        </button>
+      )}
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        This assessment asks a few questions based on your background, so a resume is required to
+        continue.
+      </p>
+    </div>
+  );
+}
+
 function Microphone() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  // resume_required is always false for situational_simulation per the backend
+  // contract, but gate on the actual assessment_mode too so this never shows
+  // up in the wrong flow even if that assumption ever changes upstream.
+  const resumeNeeded = getStoredAssessmentMode() === "structured_qa" && getStoredResumeRequired();
 
   const handleContinue = () => {
     const assessmentId = getStoredAssessmentId();
     const candidateName = getStoredCandidateName();
     if (!assessmentId || !candidateName) {
       void navigate({ to: "/" });
+      return;
+    }
+    if (resumeNeeded && !resumeFile) {
+      setError("Please upload your resume to continue.");
       return;
     }
 
@@ -120,7 +187,11 @@ function Microphone() {
       }
 
       try {
-        const res = await api.startCandidateSession(assessmentId, candidateName);
+        const res = await api.startCandidateSession(
+          assessmentId,
+          candidateName,
+          resumeFile ?? undefined,
+        );
         setStoredSessionId(res.session_id);
         setStoredOpeningLine(res.opening_line);
         setStoredTotalQuestions(res.total_questions_planned);
@@ -134,6 +205,17 @@ function Microphone() {
     })();
   };
 
+  const resumeBlock = resumeNeeded ? (
+    <ResumeUpload
+      file={resumeFile}
+      onSelect={(f) => {
+        setResumeFile(f);
+        setError(null);
+      }}
+      onClear={() => setResumeFile(null)}
+    />
+  ) : null;
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <AppHeader />
@@ -141,6 +223,7 @@ function Microphone() {
       {/* Mobile */}
       <main className="flex flex-1 flex-col px-4 pb-4 pt-6 md:hidden">
         <Body />
+        {resumeBlock}
         <div className="flex-1" />
         <ContinueButton onClick={handleContinue} loading={loading} error={error} />
       </main>
@@ -149,6 +232,7 @@ function Microphone() {
       <main className="hidden flex-1 justify-center px-8 md:flex">
         <div className="w-full max-w-[400px] pt-24">
           <Body />
+          {resumeBlock}
           <div className="mt-10">
             <ContinueButton onClick={handleContinue} loading={loading} error={error} />
           </div>

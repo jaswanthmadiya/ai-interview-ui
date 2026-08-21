@@ -205,25 +205,72 @@ function ReportPage() {
               </Section>
             ) : null}
 
-            {/* per-question */}
-            <Section title="Per-question evaluation">
-              <div className="space-y-4">
-                {report.per_question_evaluation.map((q) => (
-                  <div
-                    key={q.question_id}
-                    className={`border-l-4 pl-4 ${TIER_STYLE[q.tier] ?? "border-l-border"}`}
-                  >
-                    <p className="text-[14px] font-medium">{q.question}</p>
-                    <p className="mt-0.5 text-[13px] text-muted-foreground">
-                      <span className="font-semibold uppercase">
-                        {TIER_LABEL[q.tier] ?? q.tier}
-                      </span>{" "}
-                      — {q.rationale}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </Section>
+            {/* scenario outcome (for situational simulation mode) */}
+            {report.scenario_report ? (
+              <Section title="Scenario outcome & facts uncovered">
+                <div className="space-y-4">
+                  {report.scenario_report.conversation_summary ? (
+                    <div>
+                      <p className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Conversation summary
+                      </p>
+                      <p className="mt-1 text-[14px] leading-relaxed">
+                        {report.scenario_report.conversation_summary}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {report.scenario_report.facts_uncovered?.length > 0 ? (
+                    <div>
+                      <p className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Facts uncovered ({report.scenario_report.facts_uncovered.length})
+                      </p>
+                      <ul className="mt-2 space-y-1.5 text-[14px] leading-relaxed">
+                        {report.scenario_report.facts_uncovered.map((fact, fi) => (
+                          <li key={fi} className="flex items-start gap-2">
+                            <span className="mt-0.5 text-primary">✓</span>
+                            <span>{fact}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {report.scenario_report.final_proposal_summary ? (
+                    <div>
+                      <p className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Final proposal summary
+                      </p>
+                      <p className="mt-1 text-[14px] leading-relaxed">
+                        {report.scenario_report.final_proposal_summary}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </Section>
+            ) : null}
+
+            {/* per-question evaluation (for structured QA mode) */}
+            {report.per_question_evaluation?.length > 0 ? (
+              <Section title="Per-question evaluation">
+                <div className="space-y-4">
+                  {report.per_question_evaluation.map((q) => (
+                    <div
+                      key={q.question_id}
+                      className={`border-l-4 pl-4 ${TIER_STYLE[q.tier] ?? "border-l-border"}`}
+                    >
+                      <p className="text-[14px] font-medium">{q.question}</p>
+                      <p className="mt-0.5 text-[13px] text-muted-foreground">
+                        <span className="font-semibold uppercase">
+                          {TIER_LABEL[q.tier] ?? q.tier}
+                        </span>{" "}
+                        — {q.rationale}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            ) : null}
 
             {/* back button */}
             <div className="pb-4 pt-2">
