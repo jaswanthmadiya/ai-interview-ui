@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { OnboardingFlow } from "@/components/OnboardingFlow";
+import { OnboardingFlow } from "./index";
 
 const searchSchema = z.object({
   assessment_id: z.string().optional(),

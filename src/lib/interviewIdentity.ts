@@ -15,90 +15,77 @@ const KEYS = {
   resumeRequired: "interview.resumeRequired",
 } as const;
 
+// Kept as a plain string union here (rather than importing AssessmentMode from
+// lib/api) so this module has zero dependency on the API client — it's pure
+// cross-route storage plumbing.
 export type StoredAssessmentMode = "structured_qa" | "situational_simulation";
 
-function isClient(): boolean {
-  return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
-}
-
 export function getStoredAssessmentId(): string | null {
-  if (!isClient()) return null;
   return sessionStorage.getItem(KEYS.assessmentId);
 }
 
 export function setStoredAssessmentId(value: string): void {
-  if (!isClient()) return;
   sessionStorage.setItem(KEYS.assessmentId, value);
 }
 
 export function getStoredCandidateName(): string | null {
-  if (!isClient()) return null;
   return sessionStorage.getItem(KEYS.candidateName);
 }
 
 export function setStoredCandidateName(value: string): void {
-  if (!isClient()) return;
   sessionStorage.setItem(KEYS.candidateName, value);
 }
 
 export function getStoredSessionId(): string | null {
-  if (!isClient()) return null;
   return sessionStorage.getItem(KEYS.sessionId);
 }
 
 export function setStoredSessionId(value: string): void {
-  if (!isClient()) return;
   sessionStorage.setItem(KEYS.sessionId, value);
 }
 
 export function getStoredOpeningLine(): string | null {
-  if (!isClient()) return null;
   return sessionStorage.getItem(KEYS.openingLine);
 }
 
 export function setStoredOpeningLine(value: string): void {
-  if (!isClient()) return;
   sessionStorage.setItem(KEYS.openingLine, value);
 }
 
 export function getStoredTotalQuestions(): number | null {
-  if (!isClient()) return null;
   const raw = sessionStorage.getItem(KEYS.totalQuestions);
   return raw ? Number(raw) : null;
 }
 
 export function setStoredTotalQuestions(value: number): void {
-  if (!isClient()) return;
   sessionStorage.setItem(KEYS.totalQuestions, String(value));
 }
 
+// Set once on the landing page (from AssessmentPublicInfo) and read by every
+// downstream screen (scenario briefing, microphone/resume step, chat) so the
+// whole candidate flow branches on the same source of truth instead of each
+// screen re-deriving or assuming a mode.
 export function getStoredAssessmentMode(): StoredAssessmentMode {
-  if (!isClient()) return "structured_qa";
   const raw = sessionStorage.getItem(KEYS.assessmentMode);
   return raw === "situational_simulation" ? "situational_simulation" : "structured_qa";
 }
 
 export function setStoredAssessmentMode(value: StoredAssessmentMode): void {
-  if (!isClient()) return;
   sessionStorage.setItem(KEYS.assessmentMode, value);
 }
 
 export function getStoredCandidateRoleBriefing(): string | null {
-  if (!isClient()) return null;
   return sessionStorage.getItem(KEYS.candidateRoleBriefing);
 }
 
 export function setStoredCandidateRoleBriefing(value: string): void {
-  if (!isClient()) return;
   sessionStorage.setItem(KEYS.candidateRoleBriefing, value);
 }
 
 export function getStoredResumeRequired(): boolean {
-  if (!isClient()) return false;
   return sessionStorage.getItem(KEYS.resumeRequired) === "true";
 }
 
 export function setStoredResumeRequired(value: boolean): void {
-  if (!isClient()) return;
   sessionStorage.setItem(KEYS.resumeRequired, String(value));
 }
